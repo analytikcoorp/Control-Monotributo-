@@ -123,6 +123,16 @@ td.n,th.n{text-align:right}
   </div>
 
   <div class="panel sec">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between">
+      <h3 style="margin:0">Proyección: cuánto podés facturar por mes sin recategorizar</h3>
+      <label style="margin:0;display:flex;gap:8px;align-items:center;font-size:.8rem">Categoría objetivo <select id="objetivo" style="width:auto"></select></label>
+    </div>
+    <div class="kpis" id="projKpis" style="margin-top:10px"></div>
+    <p class="mini" id="projTxt" style="margin-top:8px"></p>
+    <div class="tw" style="margin-top:8px"><table id="proj"></table></div>
+  </div>
+
+  <div class="panel sec">
     <h3>Acumulado 12 meses vs tope de categoría</h3>
     <canvas id="chart" width="1000" height="360" aria-label="Gráfico de acumulado 12 meses, acreditaciones y tope"></canvas>
     <p class="mini">Línea azul: facturado 12 meses móviles. Dorada: acreditaciones computables. Punteada roja: tope de la categoría actual en la escala vigente de cada mes.</p>
@@ -252,6 +262,7 @@ function render(){
   $("meterTxt").textContent=`Consumo del tope de ${r.cat}: facturación ${pct(r.pF)}, bancos ${pct(r.pB)}. La marca dorada es el 100 %.`;
   const bajar=r.sem==="PODÉS BAJAR"?`<span class="pill p-info">Estás en ${r.cat} pero tus parámetros corresponden a ${r.sug}.</span> En la próxima recategorización (${r.prox.split("-").reverse().join("/")}) podés bajar y pagar ${fmt(r.cuota-r.cuotaS)} menos por mes. `:"";
   $("summary").innerHTML=r.e?bajar+`La cuota incluye impuesto integrado, aporte jubilatorio y obra social según la escala vigente al ${r.corte.split("-").reverse().join("/")}. Para no superar ${r.sug==="EXCLUIDO"?"el régimen":"la categoría "+CATS[Math.max(CATS.indexOf(r.sug),r.ci)]} hasta el cierre del período podés facturar hasta <b>${fmt(r.maxMes)}</b> por mes. ${r.meses<12?`Tenés ${r.meses} meses de actividad: se anualiza.`:""}`:"No hay escala cargada para la fecha de corte.";
+  if(!objTouched){$("objetivo").value=r.pos>r.ci&&r.pos<99?r.sug:r.cat;} proyeccion(r);
   drawChart(r.serie);
   // simulación
   const e=r.e; $("sim").innerHTML=`<tr><th>Cat.</th><th class="n">Tope anual</th><th class="n">Cuota mensual</th><th class="n">Margen vs anualizado</th><th>Estado</th></tr>`+(e?CATS.map((c,i)=>{const tp=e.ing[i],cu=(r.act==="Servicios"?e.cs:e.cb)[i],mg=tp-r.fA;const st=c===r.cat&&c===r.sug?'<span class="pill p-ok">ACTUAL = SUGERIDA</span>':c===r.cat?'<span class="pill p-info">ACTUAL</span>':c===r.sug?'<span class="pill p-ok">SUGERIDA</span>':mg<0?'<span class="pill p-bad">SUPERADA</span>':"";return`<tr><td><b>${c}</b></td><td class="n">${fmt(tp)}</td><td class="n">${fmt(cu)}</td><td class="n" style="color:${mg<0?"var(--bad)":"inherit"}">${fmt(mg)}</td><td>${st}</td></tr>`;}).join(""):"");
@@ -266,6 +277,27 @@ function render(){
    ["Acreditaciones no computables (12 m)",fmt(vis.filter(x=>!x.comp).reduce((a,x)=>a+x.cred,0)),false],["Diferencia bancos vs facturado (12 m)",fmt(r.b12-r.f12),Math.abs(r.b12-r.f12)>r.f12*0.10],
    ["Facturación anualizada supera el tope actual",r.fA>r.tope?"Sí":"No",r.fA>r.tope],["Acreditaciones anualizadas superan el tope actual",r.bA>r.tope?"Sí":"No",r.bA>r.tope],["Escala vigente para la fecha de corte",r.e?"Sí":"No",!r.e]];
   $("ctrl").innerHTML=`<tr><th>Control</th><th class="n">Valor</th><th>Estado</th></tr>`+ctr.map(([l,v,bad])=>`<tr><td style="white-space:normal">${l}</td><td class="n">${v}</td><td><span class="pill ${bad?"p-bad":"p-ok"}">${bad?"REVISAR":"OK"}</span></td></tr>`).join("");
+}
+function proyeccion(r){
+  const e=r.e; if(!e){$("projKpis").innerHTML="";$("proj").innerHTML="";$("projTxt").textContent="Sin escala vigente.";return;}
+  const obj=$("objetivo").value||r.cat; const oi=CATS.indexOf(obj); const tope=e.ing[oi];
+  const close=addM(r.prox,-1); const closeM=som(close); // último mes del período evaluado
+  const fut=[]; let m=som(addM(r.corte,1)); while(m<=closeM){fut.push(m); m=som(addM(m,1));}
+  const factMes=mm=>FAC.filter(x=>x.f>=mm&&x.f<=eom(mm)).reduce((a,x)=>a+x.imp,0);
+  const cur=som(r.corte); const ult3=[0,1,2].map(k=>factMes(som(addM(cur,-k)))); const ritmo=ult3.reduce((a,b)=>a+b,0)/3;
+  // X constante máxima: para cada mes futuro i, actualWindow_i + i*X <= tope
+  let X=Infinity; const rows=[];
+  fut.forEach((mm,i)=>{ const n=i+1; const w0=som(addM(mm,-11)); let act=0; for(let k=0;k<12;k++){const wm=som(addM(mm,-k)); if(wm<=cur) act+=factMes(wm);} const cap=(tope-act)/n; if(cap<X)X=cap; rows.push({mm,n,act,sale:factMes(som(addM(mm,-12)))}); });
+  X=fut.length?Math.max(0,X):0;
+  let mesSup=null; rows.forEach(rw=>{ rw.acumX=rw.act+rw.n*X; rw.acumR=rw.act+rw.n*ritmo; rw.capMes=Math.max(0,tope-rw.act-(rw.n-1)*X); if(!mesSup&&rw.acumR>tope)mesSup=rw.mm; });
+  const ya=r.fA>tope; const mesTxt=mm=>{const d=new Date(mm+"T00:00:00");return d.toLocaleString("es-AR",{month:"short",year:"2-digit"});};
+  $("projKpis").innerHTML=[
+    ["Máximo promedio mensual",ya&&X<=0?"$ 0":"$ "+fmt(X),`${fut.length} meses hasta el cierre (${mesTxt(closeM)}) · tope ${obj}: ${fmt(tope)}`],
+    ["Tu ritmo actual","$ "+fmt(ritmo),"promedio de los últimos 3 meses facturados"],
+    ["Si seguís a este ritmo",mesSup?`<span class="pill p-bad">superás en ${mesTxt(mesSup)}</span>`:`<span class="pill p-ok">te mantenés en ${obj}</span>`,mesSup?"antes del cierre del período":"hasta el cierre del período"],
+  ].map(([l,v,s_])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s_}</div></div>`).join("");
+  $("projTxt").textContent=ya?`Con los últimos 12 meses ya superaste el tope de ${obj}; para volver a entrar tendrías que facturar menos de ${fmt(X)} por mes hasta ${mesTxt(closeM)}, porque cada mes nuevo reemplaza al de hace un año.`:`Cada mes que entra reemplaza al de hace 12 meses. El máximo se calcula para que el acumulado móvil nunca pase el tope en ningún mes hasta el cierre.`;
+  $("proj").innerHTML=`<tr><th>Mes</th><th class="n">Sale de la ventana</th><th class="n">Máximo a facturar</th><th class="n">Acum. 12m facturando el máximo</th><th class="n">Acum. 12m a ritmo actual</th><th>Estado</th></tr>`+rows.map(rw=>`<tr><td>${mesTxt(rw.mm)}</td><td class="n">${fmt(rw.sale)}</td><td class="n"><b>${fmt(X)}</b></td><td class="n">${fmt(rw.acumX)}</td><td class="n" style="color:${rw.acumR>tope?"var(--bad)":"inherit"}">${fmt(rw.acumR)}</td><td>${rw.acumR>tope?'<span class="pill p-bad">SUPERA</span>':rw.acumR>=tope*r.umbral?'<span class="pill p-warn">CERCA</span>':'<span class="pill p-ok">OK</span>'}</td></tr>`).join("");
 }
 function drawChart(s){
   const cv=$("chart"),ctx=cv.getContext("2d"),W=cv.width,H=cv.height,P={l:90,r:20,t:20,b:50}; ctx.clearRect(0,0,W,H);
@@ -282,6 +314,8 @@ function drawChart(s){
 
 // ---------- init ----------
 $("cat").innerHTML=CATS.map(c=>`<option ${c==="D"?"selected":""}>${c}</option>`).join("");
+$("objetivo").innerHTML=CATS.map(c=>`<option>${c}</option>`).join(""); let objTouched=false;
+$("objetivo").addEventListener("change",()=>{objTouched=true;render();});
 ["cat","act","alta","corte","umbral","alq"].forEach(id=>$(id).addEventListener("input",render));
 $("kw").addEventListener("input",()=>{autoClass();render();});
 $("facDemo").addEventListener("click",()=>{demo();render();}); $("bcoDemo").addEventListener("click",()=>{demo();render();});
