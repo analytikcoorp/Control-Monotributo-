@@ -38,7 +38,7 @@ button.sm{padding:4px 9px;font-size:.78rem}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .kpi{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--bg)}
 .kpi .l{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-.kpi .v{font-family:var(--display);font-size:1.6rem;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;line-height:1.2}
+.kpi .v{font-family:var(--display);font-size:1.45rem;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;line-height:1.2}
 .kpi .s{font-size:.78rem;color:var(--muted)}
 .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:600;font-size:.85rem}
 .p-ok{background:var(--ok-bg);color:var(--ok)}.p-warn{background:var(--warn-bg);color:var(--warn)}.p-bad{background:var(--bad-bg);color:var(--bad)}
@@ -241,13 +241,14 @@ function render(){
   const r=calc(); const cls={OK:"p-ok",ALERTA:"p-warn",RECATEGORIZAR:"p-bad",EXCLUIDO:"p-bad"}[r.sem];
   $("kpis").innerHTML=[
     ["Categoría actual",r.cat,"declarada en ARCA"],["Categoría sugerida",r.sug,"mayor de facturación, bancos y alquiler"],
+    ["Cuota mensual actual","$ "+fmt(r.cuota),`categoría ${r.cat} · ${r.act.toLowerCase()} · ${fmt(r.cuota*12)} al año`],["Cuota si recategorizás","$ "+fmt(r.cuotaS),r.cuotaS-r.cuota===0?"sin cambio":`${r.cuotaS>r.cuota?"+":""}${fmt(r.cuotaS-r.cuota)} por mes · ${fmt((r.cuotaS-r.cuota)*12)} al año`],
     ["% tope (facturación)",pct(r.pF),`anualizado ${fmt(r.fA)}`],["% tope (bancos)",pct(r.pB),`computable ${fmt(r.bA)}`],
     ["Margen hasta el tope",fmt(r.tope-r.fA),`tope ${r.cat}: ${fmt(r.tope)}`],["Próxima recategorización",`${r.dias} días`,r.prox.split("-").reverse().join("/")],
     ["Semáforo",`<span class="pill ${cls}">${r.sem}</span>`,""]
   ].map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
   const w=Math.min(1.2,Math.max(r.pF,r.pB)); $("meterFill").style.width=(w/1.2*100)+"%"; $("meterFill").style.background=r.sem==="OK"?"var(--ok)":r.sem==="ALERTA"?"var(--warn)":"var(--bad)"; $("meterMark").style.left=(1/1.2*100)+"%";
   $("meterTxt").textContent=`Consumo del tope de ${r.cat}: facturación ${pct(r.pF)}, bancos ${pct(r.pB)}. La marca dorada es el 100 %.`;
-  $("summary").innerHTML=r.e?`Cuota actual ${fmt(r.cuota)} → sugerida ${fmt(r.cuotaS)} por mes (dif. ${fmt(r.cuotaS-r.cuota)}). Para no superar ${r.sug==="EXCLUIDO"?"el régimen":"la categoría "+CATS[Math.max(CATS.indexOf(r.sug),r.ci)]} hasta el cierre del período podés facturar hasta <b>${fmt(r.maxMes)}</b> por mes. ${r.meses<12?`Tenés ${r.meses} meses de actividad: se anualiza.`:""}`:"No hay escala cargada para la fecha de corte.";
+  $("summary").innerHTML=r.e?`La cuota incluye impuesto integrado, aporte jubilatorio y obra social según la escala vigente al ${r.corte.split("-").reverse().join("/")}. Para no superar ${r.sug==="EXCLUIDO"?"el régimen":"la categoría "+CATS[Math.max(CATS.indexOf(r.sug),r.ci)]} hasta el cierre del período podés facturar hasta <b>${fmt(r.maxMes)}</b> por mes. ${r.meses<12?`Tenés ${r.meses} meses de actividad: se anualiza.`:""}`:"No hay escala cargada para la fecha de corte.";
   drawChart(r.serie);
   // simulación
   const e=r.e; $("sim").innerHTML=`<tr><th>Cat.</th><th class="n">Tope anual</th><th class="n">Cuota mensual</th><th class="n">Margen vs anualizado</th><th>Estado</th></tr>`+(e?CATS.map((c,i)=>{const tp=e.ing[i],cu=(r.act==="Servicios"?e.cs:e.cb)[i],mg=tp-r.fA;const st=c===r.cat?'<span class="pill p-ok" style="background:var(--gold-soft);color:var(--gold)">ACTUAL</span>':c===r.sug?'<span class="pill p-ok">SUGERIDA</span>':mg<0?'<span class="pill p-bad">SUPERADA</span>':"";return`<tr><td><b>${c}</b></td><td class="n">${fmt(tp)}</td><td class="n">${fmt(cu)}</td><td class="n" style="color:${mg<0?"var(--bad)":"inherit"}">${fmt(mg)}</td><td>${st}</td></tr>`;}).join(""):"");
