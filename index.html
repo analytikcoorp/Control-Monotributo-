@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Control Monotributo</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
@@ -163,7 +164,7 @@ td.n,th.n{text-align:right}
   </div>
 
   </div>
-  <p class="foot">Escalas cargadas: feb-2025, ago-2025, feb-2026 y ago-2026 (ARCA). Los alquileres de algunas categorías son estimados. Herramienta de control de gestión; no reemplaza el asesoramiento profesional. Analytik · prototipo v0.1.</p>
+  <p class="foot"><span id="escInfo"></span> Los alquileres de algunas categorías son estimados. Herramienta de control de gestión; no reemplaza el asesoramiento profesional. Analytik · prototipo v0.2.</p>
 </main>
 </div>
 </div>
@@ -171,7 +172,7 @@ td.n,th.n{text-align:right}
 <script>
 // ---------- Escalas con vigencia ----------
 const CATS="ABCDEFGHIJK".split("");
-const ESC=[
+let ESC=[
  {d:"2024-08-01",h:"2025-01-31",ing:[6450000,9450000,13250000,16450000,19350000,24250000,29000000,44000000,49250000,56400000,68000000],alq:[1500000,1500000,2050000,2050000,2600000,2600000,2600000,3850000,3850000,3850000,3850000],cs:[26600,30280,35458,45443,64348,80983,123696,280734,517608,620264,867084],cb:[26600,30280,34658,44343,58148,69783,85296,170734,255108,311916,377084]},
  {d:"2025-02-01",h:"2025-07-31",ing:[7813063.45,11447046.44,16050091.57,19926340.10,23439190.34,29374695.90,35128502.31,53298417.30,59657887.55,68318880.36,82370281.28],alq:[1817072,1817072,2483315,2483315,3149558,3149558,3149558,4663617,4663617,4663617,4663617],cs:[32221.31,36679,42951.25,55047.23,77946.23,98097.03,149838.70,340061.67,626931.02,751358.43,1050323.24],cb:[32221.31,36679,41982.22,53714.87,70436.23,84530.74,103321.64,206815.16,309020.20,377851.45,456773.07]},
  {d:"2025-08-01",h:"2026-01-31",ing:[8992597.87,13175201.52,18473166.15,22934610.05,26977793.60,33809379.57,40431835.35,61344853.64,68664410.05,78632948.76,94805682.90],alq:[2091361,2091361,2859263,2859263,3626293,3626293,3626293,6274117,6274117,6274117,6274117],cs:[37085.74,42216.41,49435.58,63357.80,89714.31,112906.59,172457.38,391400.62,721650.46,874069.29,1208890.60],cb:[37085.74,42216.41,48320.22,61824.18,81070.26,97291.54,118920.05,238038.48,355672.64,434895.92,525732.01]},
@@ -179,6 +180,9 @@ const ESC=[
  {d:"2026-08-01",h:"2027-01-31",ing:[12009410.45,17595182.74,24670494.31,30628651.43,36028231.33,45151659.41,53995798.87,81924660.37,91699761.90,105012519.20,126610838.75],alq:[2792886.15,2792886.15,3816944.41,3816944.41,4841002.66,4841002.66,4841002.66,8375365,8375365,8375365,8375365],cs:[49527.18,56379.08,66020.12,84612.93,119811.45,150784.21,230312.94,522706.68,963747.86,1167299.76,1614446.04],cb:[49527.18,56379.08,64530.58,82564.81,108267.51,129930.65,158815.05,317895.01,474992.78,580793.69,702103.24]},
 ];
 const escAt=d=>ESC.find(e=>d>=e.d&&d<=e.h)||null;
+let ESC_INFO={actualizado:"2026-10-16",origen:"valores incluidos en la página"};
+async function cargarEscalas(){ try{ const r=await fetch("escalas.json",{cache:"no-store"}); if(!r.ok) throw 0; const j=await r.json(); if(Array.isArray(j.vigencias)&&j.vigencias.length&&j.vigencias.every(v=>v.d&&v.h&&v.ing&&v.ing.length===11)){ ESC=j.vigencias.sort((a,b)=>a.d<b.d?-1:1); ESC_INFO={actualizado:j.actualizado||"",origen:"escalas.json"}; } }catch(e){} pintarEscalas(); if(typeof render==="function") render(); }
+function pintarEscalas(){ const el=document.getElementById("escInfo"); if(!el) return; const ult=ESC[ESC.length-1]; const f=x=>x?x.split("-").reverse().join("/"):""; el.innerHTML=`Escalas de ARCA: ${ESC.length} vigencias, la última desde ${f(ult.d)} hasta ${f(ult.h)} · tabla actualizada el ${f(ESC_INFO.actualizado)} (${ESC_INFO.origen}). Se revisa automáticamente en las actualizaciones de febrero y agosto.`; }
 const catByVal=(e,arr,x)=>{if(!e)return"SIN ESCALA";const n=arr.filter(v=>v<x).length;return n>=CATS.length?"EXCLUIDO":CATS[n];};
 
 // ---------- utilidades ----------
@@ -197,7 +201,7 @@ const findCol=(h,res)=>{for(const r of res){const i=h.findIndex(x=>r.test(x));if
 // ---------- estado ----------
 let FAC=[], MOV=[];
 const KW=()=> $("kw").value.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
-const norm=s=>s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+const norm=s=>s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 
 // ---------- demo ----------
 function seed(n){let x=n;return()=>{x=(x*1664525+1013904223)%4294967296;return x/4294967296;};}
@@ -342,5 +346,5 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",rend
 (()=>{const d=new Date(); d.setDate(0); $("corte").value=iso(new Date(d.getTime()-d.getTimezoneOffset()*6e4));})();
 $("emptyDemo").addEventListener("click",()=>{demo();render();});
 $("facClear").addEventListener("click",()=>{ FAC=[]; $("facInfo").textContent="Sin facturas cargadas."; render(); });
-render();
+pintarEscalas(); render(); cargarEscalas();
 </script>
