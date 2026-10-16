@@ -41,7 +41,7 @@ button.sm{padding:4px 9px;font-size:.78rem}
 .kpi .v{font-family:var(--display);font-size:1.45rem;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;line-height:1.2}
 .kpi .s{font-size:.78rem;color:var(--muted)}
 .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:600;font-size:.85rem}
-.p-ok{background:var(--ok-bg);color:var(--ok)}.p-warn{background:var(--warn-bg);color:var(--warn)}.p-bad{background:var(--bad-bg);color:var(--bad)}
+.p-ok{background:var(--ok-bg);color:var(--ok)}.p-info{background:var(--gold-soft);color:var(--gold)}.p-warn{background:var(--warn-bg);color:var(--warn)}.p-bad{background:var(--bad-bg);color:var(--bad)}
 .meter{height:10px;background:var(--line);border-radius:999px;overflow:hidden;margin-top:8px;position:relative}
 .meter>i{display:block;height:100%;background:var(--navy)}
 .meter>b{position:absolute;top:-3px;width:2px;height:16px;background:var(--gold)}
@@ -228,30 +228,33 @@ function calc(){
   const dias=Math.round((new Date(prox)-new Date(corte))/864e5); const mRecat=Math.max(1,monthsDiff(corte,prox));
   const maxMes=topeRef?Math.max(0,(topeRef-fA)/mRecat):0;
   const pF=tope?fA/tope:0, pB=tope?bA/tope:0;
-  const sem=pos>=99?"EXCLUIDO":pos>ci?"RECATEGORIZAR":Math.max(pF,pB)>=umbral?"ALERTA":"OK";
+  const sem=pos>=99?"EXCLUIDO":pos>ci?"RECATEGORIZAR":pos<ci?"PODÉS BAJAR":Math.max(pF,pB)>=umbral?"ALERTA":"OK";
+  const drivers=[[cF,"facturación"],[cB,"acreditaciones bancarias"],[cA,"alquiler"]].filter(([c])=>c===sug).map(([,n])=>n);
   // serie mensual 24m
   const serie=[]; for(let k=23;k>=0;k--){ const m=som(addM(corte,-k)); const fin=eom(m); const fr=addM(fin,-12); const ee=escAt(fin);
     serie.push({m,fact:FAC.filter(x=>x.f>=m&&x.f<=fin).reduce((a,x)=>a+x.imp,0),f12:FAC.filter(x=>x.f>fr&&x.f<=fin).reduce((a,x)=>a+x.imp,0),b12:MOV.filter(x=>x.comp&&x.f>fr&&x.f<=fin).reduce((a,x)=>a+x.cred,0),tope:ee?ee.ing[ci]:0}); }
-  return{corte,cat,act,e,ci,meses,f12,b12,fA,bA,tope,cuota,cF,cB,cA,sug,cuotaS,topeRef,prox,dias,maxMes,pF,pB,sem,umbral,serie};
+  return{corte,cat,act,e,ci,meses,f12,b12,fA,bA,tope,cuota,cF,cB,cA,sug,pos,cuotaS,topeRef,prox,dias,maxMes,pF,pB,sem,umbral,serie,drivers};
 }
 function monthsDiff(a,b){const A=new Date(a+"T00:00:00"),B=new Date(b+"T00:00:00");let m=(B.getFullYear()-A.getFullYear())*12+(B.getMonth()-A.getMonth());if(B.getDate()<A.getDate())m--;return m;}
 
 // ---------- render ----------
 function render(){
-  const r=calc(); const cls={OK:"p-ok",ALERTA:"p-warn",RECATEGORIZAR:"p-bad",EXCLUIDO:"p-bad"}[r.sem];
+  const r=calc(); const cls={OK:"p-ok",ALERTA:"p-warn",RECATEGORIZAR:"p-bad",EXCLUIDO:"p-bad","PODÉS BAJAR":"p-info"}[r.sem];
+  const dir=r.pos>=99?"":r.pos>r.ci?"sube":r.pos<r.ci?"baja":"se mantiene";
   $("kpis").innerHTML=[
-    ["Categoría actual",r.cat,"declarada en ARCA"],["Categoría sugerida",r.sug,"mayor de facturación, bancos y alquiler"],
-    ["Cuota mensual actual","$ "+fmt(r.cuota),`categoría ${r.cat} · ${r.act.toLowerCase()} · ${fmt(r.cuota*12)} al año`],["Cuota si recategorizás","$ "+fmt(r.cuotaS),r.cuotaS-r.cuota===0?"sin cambio":`${r.cuotaS>r.cuota?"+":""}${fmt(r.cuotaS-r.cuota)} por mes · ${fmt((r.cuotaS-r.cuota)*12)} al año`],
+    ["Categoría actual",r.cat,"declarada en ARCA"],["Categoría sugerida",r.sug,r.pos>=99?"supera el tope de K":`la define ${r.drivers.join(" y ")} · ${dir}${r.pos===r.ci?"":" desde "+r.cat}`],
+    ["Cuota mensual actual","$ "+fmt(r.cuota),`categoría ${r.cat} · ${r.act.toLowerCase()} · ${fmt(r.cuota*12)} al año`],["Cuota en la categoría sugerida","$ "+fmt(r.cuotaS),r.cuotaS-r.cuota===0?`misma categoría ${r.sug}: sin cambio`:`categoría ${r.sug} · ${r.cuotaS>r.cuota?"pagarías +":"ahorrarías "}${fmt(Math.abs(r.cuotaS-r.cuota))} por mes · ${fmt(Math.abs(r.cuotaS-r.cuota)*12)} al año`],
     ["% tope (facturación)",pct(r.pF),`anualizado ${fmt(r.fA)}`],["% tope (bancos)",pct(r.pB),`computable ${fmt(r.bA)}`],
     ["Margen hasta el tope",fmt(r.tope-r.fA),`tope ${r.cat}: ${fmt(r.tope)}`],["Próxima recategorización",`${r.dias} días`,r.prox.split("-").reverse().join("/")],
     ["Semáforo",`<span class="pill ${cls}">${r.sem}</span>`,""]
   ].map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
-  const w=Math.min(1.2,Math.max(r.pF,r.pB)); $("meterFill").style.width=(w/1.2*100)+"%"; $("meterFill").style.background=r.sem==="OK"?"var(--ok)":r.sem==="ALERTA"?"var(--warn)":"var(--bad)"; $("meterMark").style.left=(1/1.2*100)+"%";
+  const w=Math.min(1.2,Math.max(r.pF,r.pB)); $("meterFill").style.width=(w/1.2*100)+"%"; $("meterFill").style.background=(r.sem==="OK"||r.sem==="PODÉS BAJAR")?"var(--ok)":r.sem==="ALERTA"?"var(--warn)":"var(--bad)"; $("meterMark").style.left=(1/1.2*100)+"%";
   $("meterTxt").textContent=`Consumo del tope de ${r.cat}: facturación ${pct(r.pF)}, bancos ${pct(r.pB)}. La marca dorada es el 100 %.`;
-  $("summary").innerHTML=r.e?`La cuota incluye impuesto integrado, aporte jubilatorio y obra social según la escala vigente al ${r.corte.split("-").reverse().join("/")}. Para no superar ${r.sug==="EXCLUIDO"?"el régimen":"la categoría "+CATS[Math.max(CATS.indexOf(r.sug),r.ci)]} hasta el cierre del período podés facturar hasta <b>${fmt(r.maxMes)}</b> por mes. ${r.meses<12?`Tenés ${r.meses} meses de actividad: se anualiza.`:""}`:"No hay escala cargada para la fecha de corte.";
+  const bajar=r.sem==="PODÉS BAJAR"?`<span class="pill p-info">Estás en ${r.cat} pero tus parámetros corresponden a ${r.sug}.</span> En la próxima recategorización (${r.prox.split("-").reverse().join("/")}) podés bajar y pagar ${fmt(r.cuota-r.cuotaS)} menos por mes. `:"";
+  $("summary").innerHTML=r.e?bajar+`La cuota incluye impuesto integrado, aporte jubilatorio y obra social según la escala vigente al ${r.corte.split("-").reverse().join("/")}. Para no superar ${r.sug==="EXCLUIDO"?"el régimen":"la categoría "+CATS[Math.max(CATS.indexOf(r.sug),r.ci)]} hasta el cierre del período podés facturar hasta <b>${fmt(r.maxMes)}</b> por mes. ${r.meses<12?`Tenés ${r.meses} meses de actividad: se anualiza.`:""}`:"No hay escala cargada para la fecha de corte.";
   drawChart(r.serie);
   // simulación
-  const e=r.e; $("sim").innerHTML=`<tr><th>Cat.</th><th class="n">Tope anual</th><th class="n">Cuota mensual</th><th class="n">Margen vs anualizado</th><th>Estado</th></tr>`+(e?CATS.map((c,i)=>{const tp=e.ing[i],cu=(r.act==="Servicios"?e.cs:e.cb)[i],mg=tp-r.fA;const st=c===r.cat?'<span class="pill p-ok" style="background:var(--gold-soft);color:var(--gold)">ACTUAL</span>':c===r.sug?'<span class="pill p-ok">SUGERIDA</span>':mg<0?'<span class="pill p-bad">SUPERADA</span>':"";return`<tr><td><b>${c}</b></td><td class="n">${fmt(tp)}</td><td class="n">${fmt(cu)}</td><td class="n" style="color:${mg<0?"var(--bad)":"inherit"}">${fmt(mg)}</td><td>${st}</td></tr>`;}).join(""):"");
+  const e=r.e; $("sim").innerHTML=`<tr><th>Cat.</th><th class="n">Tope anual</th><th class="n">Cuota mensual</th><th class="n">Margen vs anualizado</th><th>Estado</th></tr>`+(e?CATS.map((c,i)=>{const tp=e.ing[i],cu=(r.act==="Servicios"?e.cs:e.cb)[i],mg=tp-r.fA;const st=c===r.cat&&c===r.sug?'<span class="pill p-ok">ACTUAL = SUGERIDA</span>':c===r.cat?'<span class="pill p-info">ACTUAL</span>':c===r.sug?'<span class="pill p-ok">SUGERIDA</span>':mg<0?'<span class="pill p-bad">SUPERADA</span>':"";return`<tr><td><b>${c}</b></td><td class="n">${fmt(tp)}</td><td class="n">${fmt(cu)}</td><td class="n" style="color:${mg<0?"var(--bad)":"inherit"}">${fmt(mg)}</td><td>${st}</td></tr>`;}).join(""):"");
   // movimientos
   const from=addM(r.corte,-12); const vis=MOV.filter(x=>x.f>from&&x.f<=r.corte); $("bcoCount").textContent=`${vis.length} en los últimos 12 meses`;
   $("movs").innerHTML=`<tr><th>Computable</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th class="n">Crédito</th></tr>`+vis.map(m=>{const i=MOV.indexOf(m);return`<tr><td><label class="chk"><input type="checkbox" data-i="${i}" ${m.comp?"checked":""}> ${m.comp?"Sí":"No"}</label></td><td>${m.f.split("-").reverse().join("/")}</td><td>${m.cta||""}</td><td style="white-space:normal">${m.desc}</td><td class="n">${fmt(m.cred)}</td></tr>`;}).join("");
