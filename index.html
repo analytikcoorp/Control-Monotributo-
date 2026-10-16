@@ -98,11 +98,14 @@ td.n,th.n{text-align:right}
 
   <div class="panel" style="margin-top:14px">
     <span class="step">Paso 3</span><h2>Extracto bancario</h2>
-    <p class="mini">Subí el CSV del banco o Mercado Pago. Detecta fecha, concepto y crédito. Luego marcá qué acreditaciones <b>no</b> son ingresos de la actividad.</p>
-    <input id="bcoFile" type="file" accept=".csv,.txt,.tsv">
+    <p class="mini">Subí un extracto por cuenta, uno después del otro: banco, Mercado Pago, segunda cuenta. Se acumulan. Detecta fecha, concepto y crédito; después marcá qué acreditaciones <b>no</b> son ingresos de la actividad.</p>
+    <label for="bcoCta">Nombre de la cuenta (ej. Galicia CA, Mercado Pago)</label>
+    <input id="bcoCta" placeholder="Se completa solo con el nombre del archivo si lo dejás vacío">
+    <input id="bcoFile" type="file" accept=".csv,.txt,.tsv" style="margin-top:8px">
     <label for="bcoTxt">o pegá acá</label>
     <textarea id="bcoTxt" placeholder="Fecha;Concepto;Débito;Crédito;Saldo&#10;14/08/2026;TRANSF RECIBIDA - CLINICA;;1250000;3400000"></textarea>
-    <div class="btns"><button id="bcoLoad">Cargar extracto</button><button class="ghost" id="bcoDemo">Usar ejemplo</button></div>
+    <div class="btns"><button id="bcoLoad">Agregar extracto</button><button class="ghost" id="bcoDemo">Usar ejemplo</button><button class="ghost sm" id="bcoClear">Vaciar todo</button></div>
+    <div id="ctas" class="btns" style="margin-top:8px"></div>
     <label for="kw">Palabras que marcan “no computable” (separadas por coma)</label>
     <input id="kw" value="cuentas propias, prestamo, préstamo, plazo fijo, fci, devolucion, devolución, sueldo, reintegro">
     <p class="hint" id="bcoInfo"></p>
@@ -185,12 +188,12 @@ function demo(){
   for(let k=0;k<24;k++){ const m=iso(d); const target=1150000+k*85000+(r()-0.5)*240000; const n=2+Math.floor(r()*3); const parts=Array.from({length:n},()=>r()+0.4); const s=parts.reduce((a,b)=>a+b,0);
     for(const p of parts){ const imp=Math.round(target*p/s/100)*100; const f=addM(m,0).slice(0,8)+String(2+Math.floor(r()*20)).padStart(2,"0"); const cli=clientes[Math.floor(r()*8)]; nro++;
       FAC.push({f,tipo:"FC C",nro:"00001-"+String(nro).padStart(8,"0"),cli,imp});
-      const fc=new Date(f+"T00:00:00"); fc.setDate(fc.getDate()+1+Math.floor(r()*8)); if(fc<=new Date("2026-09-30T00:00:00")) MOV.push({f:iso(fc),desc:(r()<0.3?"ACREDITACION MERCADO PAGO - ":"TRANSF RECIBIDA - ")+cli.toUpperCase(),cred:imp,comp:true}); }
+      const fc=new Date(f+"T00:00:00"); fc.setDate(fc.getDate()+1+Math.floor(r()*8)); if(fc<=new Date("2026-09-30T00:00:00")) {const mp=r()<0.3; MOV.push({f:iso(fc),desc:(mp?"ACREDITACION MERCADO PAGO - ":"TRANSF RECIBIDA - ")+cli.toUpperCase(),cred:imp,comp:true,cta:mp?"Mercado Pago":"Galicia CA"});} }
     d.setMonth(d.getMonth()+1); }
   FAC.push({f:"2026-05-12",tipo:"NC C",nro:"00001-00000050",cli:"TechNova SRL",imp:-180000});
-  MOV.push({f:"2025-03-14",desc:"TRANSF ENTRE CTAS PROPIAS",cred:1500000},{f:"2025-08-04",desc:"ACREDITACION PRESTAMO PERSONAL",cred:4000000},{f:"2026-01-20",desc:"VTO PLAZO FIJO",cred:2250000},{f:"2026-04-08",desc:"TRANSF RECIBIDA - JUAN PEREZ",cred:420000},{f:"2026-08-21",desc:"ACREDITACION MERCADO PAGO",cred:310000},{f:"2026-09-10",desc:"DEVOLUCION COMPRA",cred:95000});
+  MOV.push({f:"2025-03-14",desc:"TRANSF ENTRE CTAS PROPIAS",cred:1500000,cta:"Galicia CA"},{f:"2025-08-04",desc:"ACREDITACION PRESTAMO PERSONAL",cred:4000000,cta:"Galicia CA"},{f:"2026-01-20",desc:"VTO PLAZO FIJO",cred:2250000,cta:"Galicia CA"},{f:"2026-04-08",desc:"TRANSF RECIBIDA - JUAN PEREZ",cred:420000,cta:"Galicia CA"},{f:"2026-08-21",desc:"ACREDITACION MERCADO PAGO",cred:310000,cta:"Mercado Pago"},{f:"2026-09-10",desc:"DEVOLUCION COMPRA",cred:95000,cta:"Galicia CA"});
   FAC.sort((a,b)=>a.f<b.f?-1:1); MOV.sort((a,b)=>a.f<b.f?-1:1); autoClass();
-  $("facInfo").textContent=`${FAC.length} comprobantes de ejemplo (oct-2024 a sep-2026).`; $("bcoInfo").textContent=`${MOV.length} movimientos de ejemplo.`;
+  $("facInfo").textContent=`${FAC.length} comprobantes de ejemplo (oct-2024 a sep-2026).`; $("bcoInfo").textContent=`${MOV.length} movimientos de ejemplo en 2 cuentas.`;
 }
 function autoClass(){ const kw=KW(); for(const m of MOV){ if(m.manual)continue; m.comp=!kw.some(k=>norm(m.desc).includes(norm(k))); } }
 
@@ -198,10 +201,14 @@ function autoClass(){ const kw=KW(); for(const m of MOV){ if(m.manual)continue; 
 function loadFac(txt){ const {h,rows}=parseTable(txt); let iF=0,iT=1,iI=2; if(h){ iF=findCol(h,[/fecha/]); iT=findCol(h,[/tipo/]); iI=findCol(h,[/imp.*total|total|importe|monto/]); } if(iF<0||iI<0){$("facInfo").textContent="No encontré las columnas Fecha e Importe. Revisá el encabezado.";return;}
   FAC=rows.map(c=>{const f=parseDate(c[iF]); if(!f)return null; const tipo=String(c[iT]||""); const nc=/nota.*cr|nc\b|^1[23]\b|^0?[38]\b/i.test(tipo)&&!/d[eé]bito/i.test(tipo); let imp=parseNum(c[iI]); if(nc&&imp>0)imp=-imp; return{f,tipo:tipo||"FC",nro:"",cli:"",imp};}).filter(Boolean).sort((a,b)=>a.f<b.f?-1:1);
   $("facInfo").textContent=`${FAC.length} comprobantes cargados (${FAC[0]?.f} a ${FAC.at(-1)?.f}).`; render(); }
-function loadBco(txt){ const {h,rows}=parseTable(txt); let iF=0,iD=1,iC=3; if(h){ iF=findCol(h,[/fecha|date/]); iD=findCol(h,[/concepto|descrip|detalle|movimiento|referencia/]); iC=findCol(h,[/cr[eé]dito|ingreso|acredit|haber|abono/]); if(iC<0){ const iImp=findCol(h,[/importe|monto|amount/]); if(iImp>=0)iC=iImp; } } if(iF<0||iC<0){$("bcoInfo").textContent="No encontré las columnas Fecha y Crédito. Revisá el encabezado.";return;}
-  MOV=rows.map(c=>{const f=parseDate(c[iF]); const cred=parseNum(c[iC]); if(!f||cred<=0)return null; return{f,desc:String(c[iD]||""),cred};}).filter(Boolean).sort((a,b)=>a.f<b.f?-1:1); autoClass();
-  $("bcoInfo").textContent=`${MOV.length} acreditaciones cargadas.`; render(); }
-const readFile=(inp,cb)=>{const f=inp.files[0]; if(!f)return; const fr=new FileReader(); fr.onload=()=>cb(fr.result); fr.readAsText(f,"latin1");};
+function loadBco(txt,ctaName){ const {h,rows}=parseTable(txt); let iF=0,iD=1,iC=3; if(h){ iF=findCol(h,[/fecha|date/]); iD=findCol(h,[/concepto|descrip|detalle|movimiento|referencia/]); iC=findCol(h,[/cr[eé]dito|ingreso|acredit|haber|abono/]); if(iC<0){ const iImp=findCol(h,[/importe|monto|amount/]); if(iImp>=0)iC=iImp; } } if(iF<0||iC<0){$("bcoInfo").textContent="No encontré las columnas Fecha y Crédito. Revisá el encabezado.";return;}
+  const cta=(ctaName||"").trim()||("Cuenta "+(new Set(MOV.map(m=>m.cta)).size+1));
+  MOV=MOV.filter(m=>m.cta!==cta); const nuevos=rows.map(c=>{const f=parseDate(c[iF]); const cred=parseNum(c[iC]); if(!f||cred<=0)return null; return{f,desc:String(c[iD]||""),cred,cta};}).filter(Boolean);
+  MOV=MOV.concat(nuevos).sort((a,b)=>a.f<b.f?-1:1); autoClass();
+  $("bcoInfo").textContent=`${nuevos.length} acreditaciones agregadas en “${cta}”. Total: ${MOV.length}.`; $("bcoCta").value=""; $("bcoFile").value=""; $("bcoTxt").value=""; render(); }
+function renderCtas(){ const ctas=[...new Set(MOV.map(m=>m.cta||"Sin cuenta"))]; $("ctas").innerHTML=ctas.map(c=>`<span class="tag" style="display:inline-flex;gap:6px;align-items:center">${c} · ${MOV.filter(m=>(m.cta||"Sin cuenta")===c).length} <button class="sm ghost" data-cta="${c}" style="padding:0 5px;border:none;color:var(--gold)" title="Quitar esta cuenta">✕</button></span>`).join("");
+  $("ctas").querySelectorAll("button").forEach(b=>b.addEventListener("click",ev=>{const c=ev.currentTarget.dataset.cta; MOV=MOV.filter(m=>(m.cta||"Sin cuenta")!==c); $("bcoInfo").textContent=`Cuenta “${c}” quitada.`; render();})); }
+const readFile=(inp,cb)=>{const f=inp.files[0]; if(!f)return; const fr=new FileReader(); fr.onload=()=>cb(fr.result,f.name.replace(/\.[^.]+$/,"")); fr.readAsText(f,"latin1");};
 
 // ---------- cálculo ----------
 function calc(){
@@ -246,7 +253,8 @@ function render(){
   const e=r.e; $("sim").innerHTML=`<tr><th>Cat.</th><th class="n">Tope anual</th><th class="n">Cuota mensual</th><th class="n">Margen vs anualizado</th><th>Estado</th></tr>`+(e?CATS.map((c,i)=>{const tp=e.ing[i],cu=(r.act==="Servicios"?e.cs:e.cb)[i],mg=tp-r.fA;const st=c===r.cat?'<span class="pill p-ok" style="background:var(--gold-soft);color:var(--gold)">ACTUAL</span>':c===r.sug?'<span class="pill p-ok">SUGERIDA</span>':mg<0?'<span class="pill p-bad">SUPERADA</span>':"";return`<tr><td><b>${c}</b></td><td class="n">${fmt(tp)}</td><td class="n">${fmt(cu)}</td><td class="n" style="color:${mg<0?"var(--bad)":"inherit"}">${fmt(mg)}</td><td>${st}</td></tr>`;}).join(""):"");
   // movimientos
   const from=addM(r.corte,-12); const vis=MOV.filter(x=>x.f>from&&x.f<=r.corte); $("bcoCount").textContent=`${vis.length} en los últimos 12 meses`;
-  $("movs").innerHTML=`<tr><th>Computable</th><th>Fecha</th><th>Concepto</th><th class="n">Crédito</th></tr>`+vis.map(m=>{const i=MOV.indexOf(m);return`<tr><td><label class="chk"><input type="checkbox" data-i="${i}" ${m.comp?"checked":""}> ${m.comp?"Sí":"No"}</label></td><td>${m.f.split("-").reverse().join("/")}</td><td style="white-space:normal">${m.desc}</td><td class="n">${fmt(m.cred)}</td></tr>`;}).join("");
+  $("movs").innerHTML=`<tr><th>Computable</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th class="n">Crédito</th></tr>`+vis.map(m=>{const i=MOV.indexOf(m);return`<tr><td><label class="chk"><input type="checkbox" data-i="${i}" ${m.comp?"checked":""}> ${m.comp?"Sí":"No"}</label></td><td>${m.f.split("-").reverse().join("/")}</td><td>${m.cta||""}</td><td style="white-space:normal">${m.desc}</td><td class="n">${fmt(m.cred)}</td></tr>`;}).join("");
+  renderCtas();
   $("movs").querySelectorAll("input[type=checkbox]").forEach(c=>c.addEventListener("change",ev=>{const m=MOV[+ev.target.dataset.i];m.comp=ev.target.checked;m.manual=true;render();}));
   // controles
   const dup=new Set(), dups=new Set(); for(const f of FAC){const k=f.tipo+"|"+f.nro+"|"+f.f+"|"+f.imp; if(f.nro&&dup.has(k))dups.add(k); dup.add(k);}
@@ -274,7 +282,8 @@ $("cat").innerHTML=CATS.map(c=>`<option ${c==="D"?"selected":""}>${c}</option>`)
 $("kw").addEventListener("input",()=>{autoClass();render();});
 $("facDemo").addEventListener("click",()=>{demo();render();}); $("bcoDemo").addEventListener("click",()=>{demo();render();});
 $("facLoad").addEventListener("click",()=>{ if($("facFile").files[0]) readFile($("facFile"),loadFac); else if($("facTxt").value.trim()) loadFac($("facTxt").value); });
-$("bcoLoad").addEventListener("click",()=>{ if($("bcoFile").files[0]) readFile($("bcoFile"),loadBco); else if($("bcoTxt").value.trim()) loadBco($("bcoTxt").value); });
+$("bcoLoad").addEventListener("click",()=>{ const n=$("bcoCta").value; if($("bcoFile").files[0]) readFile($("bcoFile"),(t,fn)=>loadBco(t,n||fn)); else if($("bcoTxt").value.trim()) loadBco($("bcoTxt").value,n); });
+$("bcoClear").addEventListener("click",()=>{ MOV=[]; $("bcoInfo").textContent="Sin extractos cargados."; render(); });
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",render);
 demo(); render();
 </script>
