@@ -236,14 +236,18 @@ function calc(){
   const topeRef=pos>=99||!e?0:e.ing[Math.max(pos,ci)];
   const y=+corte.slice(0,4); const cands=[`${y}-01-01`,`${y}-07-01`,`${y+1}-01-01`].filter(x=>x>corte); const prox=cands[0];
   const dias=Math.round((new Date(prox)-new Date(corte))/864e5); const mRecat=Math.max(1,monthsDiff(corte,prox));
-  const maxMes=topeRef?Math.max(0,(topeRef-fA)/mRecat):0;
+  // máximo parejo exacto: el acumulado móvil no supera topeRef en ningún mes hasta el cierre
+  let maxMes=0, nFut=0, closeM=som(addM(prox,-1));
+  if(topeRef){ const cur=som(corte); const fm=mm=>FAC.filter(x=>x.f>=mm&&x.f<=eom(mm)).reduce((a,x)=>a+x.imp,0); let X=Infinity; let mm=som(addM(corte,1));
+    while(mm<=closeM){ nFut++; let act=0; for(let k=0;k<12;k++){const wm=som(addM(mm,-k)); if(wm<=cur) act+=fm(wm);} X=Math.min(X,(topeRef-act)/nFut); mm=som(addM(mm,1)); }
+    maxMes=nFut?Math.max(0,X):0; }
   const pF=tope?fA/tope:0, pB=tope?bA/tope:0;
   const sem=pos>=99?"EXCLUIDO":pos>ci?"RECATEGORIZAR":pos<ci?"PODÉS BAJAR":Math.max(pF,pB)>=umbral?"ALERTA":"OK";
   const drivers=[[cF,"facturación"],[cB,"acreditaciones bancarias"],[cA,"alquiler"]].filter(([c])=>c===sug).map(([,n])=>n);
   // serie mensual 24m
   const serie=[]; for(let k=23;k>=0;k--){ const m=som(addM(corte,-k)); const fin=eom(m); const fr=addM(fin,-12); const ee=escAt(fin);
     serie.push({m,fact:FAC.filter(x=>x.f>=m&&x.f<=fin).reduce((a,x)=>a+x.imp,0),f12:FAC.filter(x=>x.f>fr&&x.f<=fin).reduce((a,x)=>a+x.imp,0),b12:MOV.filter(x=>x.comp&&x.f>fr&&x.f<=fin).reduce((a,x)=>a+x.cred,0),tope:ee?ee.ing[ci]:0}); }
-  return{corte,cat,act,e,ci,meses,f12,b12,fA,bA,tope,cuota,cF,cB,cA,sug,pos,cuotaS,topeRef,prox,dias,maxMes,pF,pB,sem,umbral,serie,drivers};
+  return{corte,cat,act,e,ci,meses,f12,b12,fA,bA,tope,cuota,cF,cB,cA,sug,pos,cuotaS,topeRef,prox,dias,maxMes,nFut,closeM,pF,pB,sem,umbral,serie,drivers};
 }
 function monthsDiff(a,b){const A=new Date(a+"T00:00:00"),B=new Date(b+"T00:00:00");let m=(B.getFullYear()-A.getFullYear())*12+(B.getMonth()-A.getMonth());if(B.getDate()<A.getDate())m--;return m;}
 
@@ -255,13 +259,14 @@ function render(){
     ["Categoría actual",r.cat,"declarada en ARCA"],["Categoría sugerida",r.sug,r.pos>=99?"supera el tope de K":`la define ${r.drivers.join(" y ")} · ${dir}${r.pos===r.ci?"":" desde "+r.cat}`],
     ["Cuota mensual actual","$ "+fmt(r.cuota),`categoría ${r.cat} · ${r.act.toLowerCase()} · ${fmt(r.cuota*12)} al año`],["Cuota en la categoría sugerida","$ "+fmt(r.cuotaS),r.cuotaS-r.cuota===0?`misma categoría ${r.sug}: sin cambio`:`categoría ${r.sug} · ${r.cuotaS>r.cuota?"pagarías +":"ahorrarías "}${fmt(Math.abs(r.cuotaS-r.cuota))} por mes · ${fmt(Math.abs(r.cuotaS-r.cuota)*12)} al año`],
     ["% tope (facturación)",pct(r.pF),`anualizado ${fmt(r.fA)}`],["% tope (bancos)",pct(r.pB),`computable ${fmt(r.bA)}`],
-    ["Margen hasta el tope",fmt(r.tope-r.fA),`tope ${r.cat}: ${fmt(r.tope)}`],["Próxima recategorización",`${r.dias} días`,r.prox.split("-").reverse().join("/")],
+    ["Margen hasta el tope",fmt(r.tope-r.fA),`tope ${r.cat}: ${fmt(r.tope)}`],
+    ["Máximo a facturar por mes",r.pos>=99?"—":"$ "+fmt(r.maxMes),r.pos>=99?"superaste el régimen":`para no superar ${CATS[Math.max(r.pos,r.ci)]} en los ${r.nFut} meses hasta ${r.closeM.split("-").reverse().slice(1).join("/")}`],["Próxima recategorización",`${r.dias} días`,r.prox.split("-").reverse().join("/")],
     ["Semáforo",`<span class="pill ${cls}">${r.sem}</span>`,""]
   ].map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
   const w=Math.min(1.2,Math.max(r.pF,r.pB)); $("meterFill").style.width=(w/1.2*100)+"%"; $("meterFill").style.background=(r.sem==="OK"||r.sem==="PODÉS BAJAR")?"var(--ok)":r.sem==="ALERTA"?"var(--warn)":"var(--bad)"; $("meterMark").style.left=(1/1.2*100)+"%";
   $("meterTxt").textContent=`Consumo del tope de ${r.cat}: facturación ${pct(r.pF)}, bancos ${pct(r.pB)}. La marca dorada es el 100 %.`;
   const bajar=r.sem==="PODÉS BAJAR"?`<span class="pill p-info">Estás en ${r.cat} pero tus parámetros corresponden a ${r.sug}.</span> En la próxima recategorización (${r.prox.split("-").reverse().join("/")}) podés bajar y pagar ${fmt(r.cuota-r.cuotaS)} menos por mes. `:"";
-  $("summary").innerHTML=r.e?bajar+`La cuota incluye impuesto integrado, aporte jubilatorio y obra social según la escala vigente al ${r.corte.split("-").reverse().join("/")}. Para no superar ${r.sug==="EXCLUIDO"?"el régimen":"la categoría "+CATS[Math.max(CATS.indexOf(r.sug),r.ci)]} hasta el cierre del período podés facturar hasta <b>${fmt(r.maxMes)}</b> por mes. ${r.meses<12?`Tenés ${r.meses} meses de actividad: se anualiza.`:""}`:"No hay escala cargada para la fecha de corte.";
+  $("summary").innerHTML=r.e?bajar+`La cuota incluye impuesto integrado, aporte jubilatorio y obra social según la escala vigente al ${r.corte.split("-").reverse().join("/")}. ${r.meses<12?`Tenés ${r.meses} meses de actividad: se anualiza.`:""}`:"No hay escala cargada para la fecha de corte.";
   if(!objTouched){$("objetivo").value=r.pos>r.ci&&r.pos<99?r.sug:r.cat;} proyeccion(r);
   drawChart(r.serie);
   // simulación
